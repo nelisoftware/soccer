@@ -1,5 +1,5 @@
 import type { DiaDTO, JogadorDTO } from "@/lib/dal";
-import type { ConfigSala, Contexto } from "@/lib/engine";
+import type { ConfigSala, Contexto, EstadoDia } from "@/lib/engine";
 import type { RespostaAcao } from "@/lib/resposta";
 
 export interface AcoesJogo {
@@ -7,10 +7,15 @@ export interface AcoesJogo {
   dia: DiaDTO;
   editavel: boolean;
   pendente: boolean;
-  /** Executa uma Server Action do dia passando codigo, diaId e versão atuais. */
+  /**
+   * Executa uma Server Action do dia passando codigo, diaId e versão atuais.
+   * `otimista` aplica a mesma regra do motor localmente para a tela mudar na hora
+   * (ex.: gol); quando o servidor responde, vale o estado dele.
+   */
   rodar: (
     fn: (codigo: string, diaId: string, versao: number) => Promise<RespostaAcao>,
     aoConcluir?: () => void,
+    otimista?: (estado: EstadoDia) => EstadoDia,
   ) => void;
 }
 

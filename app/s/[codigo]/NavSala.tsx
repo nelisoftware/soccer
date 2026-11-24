@@ -10,6 +10,7 @@ import {
   IconeHistorico,
   IconePessoas,
 } from "@/components/icones";
+import { PoweredBy } from "@/components/PoweredBy";
 import { cx } from "@/components/ui";
 
 const ITENS = [
@@ -60,6 +61,7 @@ export function NavSala() {
         <p className="mt-auto px-2 text-sm text-muted break-all">
           Sala <span className="font-semibold text-ink">{decodeURIComponent(codigo)}</span>
         </p>
+        <PoweredBy className="mt-4 px-2 pt-4 border-t border-line w-full" />
       </nav>
 
       {/* Mobile/Tablet: abas fixas embaixo */}

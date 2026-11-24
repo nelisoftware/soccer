@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(npx vitest run 2>$null | Select-Object -Last 8; npx tsc --noEmit -p .; \"tsc exit: $LASTEXITCODE\"; npx eslint app lib components; \"eslint exit: $LASTEXITCODE\")"
+      "PowerShell(npx vitest run 2>$null | Select-Object -Last 8; npx tsc --noEmit -p .; \"tsc exit: $LASTEXITCODE\"; npx eslint app lib components; \"eslint exit: $LASTEXITCODE\")",
+      "PowerShell(npx eslint \"app/s/[codigo]/jogo/Quadra.tsx\" \"app/s/[codigo]/jogo/SorteioEmpate.tsx\" lib/engine)",
+      "PowerShell(npx vitest run lib/engine 2>&1)",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $i = [System.Drawing.Image]::FromFile\\(\\(Resolve-Path public/logoPelada.png\\)\\); \"$\\($i.Width\\)x$\\($i.Height\\)\"; $i.Dispose\\(\\); \\(Get-Item public/logoPelada.png\\).Length)",
+      "PowerShell($c = Get-Content public/company.svg -Raw; $c.Length; $c.Substring\\(0, [Math]::Min\\(1500, $c.Length\\)\\))",
+      "PowerShell(& \"C:\\\\Users\\\\nelis\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f7d9517cf71dff39\\\\f9c57c2c-5e03-4c5f-9097-d2ce534b2359\\\\scratchpad\\\\gerar-favicon.ps1\" -Origem \\(Resolve-Path public/icons/icon-512.png\\).Path -Destino \\(Join-Path \\(Get-Location\\) \"app\\\\favicon.ico\"\\))",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $ico = New-Object System.Drawing.Icon\\(\\(Resolve-Path app/favicon.ico\\).Path, 48, 48\\); $b = $ico.ToBitmap\\(\\); $big = New-Object System.Drawing.Bitmap 96,96; $g=[System.Drawing.Graphics]::FromImage\\($big\\); $g.InterpolationMode='NearestNeighbor'; $g.DrawImage\\($b,0,0,96,96\\); $g.Dispose\\(\\); $big.Save\\(\"C:\\\\Users\\\\nelis\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\f7d9517cf71dff39\\\\f9c57c2c-5e03-4c5f-9097-d2ce534b2359\\\\scratchpad\\\\fav48.png\"\\); \"ok $\\($b.Width\\)\")"
     ]
   }
 }

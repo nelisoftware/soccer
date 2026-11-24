@@ -1,6 +1,6 @@
 import { estiloTimes, nomeTime, resolverCor, type CorSala } from "@/lib/cores";
-import type { EstadoDia, PartidaRegistrada } from "@/lib/engine";
-import { IconeLuva, IconeTrofeu } from "@/components/icones";
+import { golsPorJogador, type EstadoDia, type PartidaRegistrada } from "@/lib/engine";
+import { IconeBola, IconeLuva, IconeTrofeu } from "@/components/icones";
 import { Cartao, Selo, Titulo, cx } from "@/components/ui";
 
 const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
@@ -12,13 +12,16 @@ interface Linha {
   empates: number;
   derrotas: number;
   goleiro: number;
+  /** Tempo em quadra somado no dia, em ms. */
+  tempoMs: number;
+  gols: number;
 }
 
 function estatisticas(estado: EstadoDia): Linha[] {
   const mapa = new Map<string, Linha>();
   const linha = (id: string) => {
     let l = mapa.get(id);
-    if (!l) mapa.set(id, (l = { id, partidas: 0, vitorias: 0, empates: 0, derrotas: 0, goleiro: 0 }));
+    if (!l) mapa.set(id, (l = { id, partidas: 0, vitorias: 0, empates: 0, derrotas: 0, goleiro: 0, tempoMs: 0, gols: 0 }));
     return l;
   };
   for (const id of estado.chegada) linha(id);
@@ -32,10 +35,23 @@ function estatisticas(estado: EstadoDia): Linha[] {
         if (p.resultado === "empate") l.empates++;
         else if (p.resultado === lado) l.vitorias++;
         else l.derrotas++;
+        // Registro antigo (sem tempo por jogador): vale a duração da partida.
+        if (!p.tempos) l.tempoMs += p.duracaoMs ?? 0;
       }
     }
+    // Inclui quem saiu numa substituição no meio da partida.
+    for (const [id, ms] of Object.entries(p.tempos ?? {})) linha(id).tempoMs += ms;
+    for (const g of p.gols ?? []) linha(g.id).gols++;
   }
   return [...mapa.values()];
+}
+
+/** 0 → "–", 42 min → "42 min", 75 min → "1h15". */
+function formatarTempo(ms: number): string {
+  const min = Math.round(ms / 60_000);
+  if (min === 0) return ms > 0 ? "<1 min" : "–";
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
 }
 
 export function HistoricoDia({
@@ -107,7 +123,9 @@ export function HistoricoDia({
                   <th className="px-1 py-2 text-right font-medium" title="Partidas">J</th>
                   <th className="px-1 py-2 text-right font-medium" title="Vitórias">V</th>
                   <th className="px-1 py-2 text-right font-medium" title="Empates">E</th>
-                  <th className="px-3 py-2 text-right font-medium" title="Derrotas">D</th>
+                  <th className="px-1 py-2 text-right font-medium" title="Derrotas">D</th>
+                  <th className="px-1 py-2 text-right font-medium" title="Gols">G</th>
+                  <th className="px-3 py-2 text-right font-medium" title="Tempo em quadra">Tempo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -128,14 +146,19 @@ export function HistoricoDia({
                     <td className="px-1 py-2 text-right tabular font-semibold">{l.partidas}</td>
                     <td className="px-1 py-2 text-right tabular">{l.vitorias}</td>
                     <td className="px-1 py-2 text-right tabular">{l.empates}</td>
-                    <td className="px-3 py-2 text-right tabular">{l.derrotas}</td>
+                    <td className="px-1 py-2 text-right tabular">{l.derrotas}</td>
+                    <td className={cx("px-1 py-2 text-right tabular", l.gols > 0 && "font-semibold")}>{l.gols}</td>
+                    <td className="px-3 py-2 text-right tabular whitespace-nowrap">{formatarTempo(l.tempoMs)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {linhas.length === 0 && <p className="p-4 text-sm text-muted">Ninguém chegou neste dia.</p>}
           </Cartao>
-          <p className="mt-2 text-xs text-muted">Em ordem de chegada. J = jogos, V/E/D = vitórias, empates, derrotas.</p>
+          <p className="mt-2 text-xs text-muted">
+            Em ordem de chegada. J = jogos, V/E/D = vitórias, empates, derrotas, G = gols. Tempo = bola rolando em quadra (quem
+            entrou ou saiu numa substituição conta só o trecho que jogou).
+</p>
         </section>
       </div>
     </div>
@@ -155,6 +178,17 @@ function CartaoPartida({
   const gravadas = p.cores ?? ["azul", "vermelho"];
   const cores = gravadas.map((c) => (typeof c === "string" ? resolverCor(c, coresSala) : c)) as [CorSala, CorSala];
   const minutos = p.duracaoMs !== undefined ? Math.round(p.duracaoMs / 60000) : null;
+  const gols = golsPorJogador(p.gols);
+  const marcador = (id: string) => {
+    const n = gols.get(id);
+    if (!n) return null;
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs font-bold tabular" aria-label={`${n} gol${n > 1 ? "s" : ""}`}>
+        <IconeBola width={12} height={12} />
+        {n > 1 && n}
+      </span>
+    );
+  };
   const COR = [
     { texto: "text-team-a", fundo: "bg-team-a-soft", tinta: "bg-team-a-tinta" },
     { texto: "text-team-b", fundo: "bg-team-b-soft", tinta: "bg-team-b-tinta" },
@@ -196,13 +230,25 @@ function CartaoPartida({
               <li className={cx("flex items-center gap-1", lado === 1 && "justify-end")}>
                 <IconeLuva width={14} height={14} className="text-muted shrink-0" />
                 {nome(p.goleiros[lado]!)}
+                {marcador(p.goleiros[lado]!)}
               </li>
             )}
             {p.times[lado].map((id) => (
-              <li key={id} className="truncate">
-                {nome(id)}
+              <li key={id} className={cx("flex items-center gap-1 min-w-0", lado === 1 && "justify-end")}>
+                <span className="truncate">{nome(id)}</span>
+                {marcador(id)}
               </li>
             ))}
+            {/* Quem fez gol e saiu numa substituição antes do fim. */}
+            {[...gols.keys()]
+              .filter((id) => !p.times[0].includes(id) && !p.times[1].includes(id) && !p.goleiros?.includes(id))
+              .filter((id) => p.gols!.some((g) => g.id === id && g.lado === lado))
+              .map((id) => (
+                <li key={id} className={cx("flex items-center gap-1 min-w-0 text-muted", lado === 1 && "justify-end")}>
+                  <span className="truncate">{nome(id)} (saiu)</span>
+                  {marcador(id)}
+                </li>
+              ))}
           </ul>
         ))}
       </div>

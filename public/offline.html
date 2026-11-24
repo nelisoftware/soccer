@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sem conexão · Pelada</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f4f6f3;
+        --text: #1b221d;
+        --muted: #5d6a61;
+        --accent: #2e8549;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1411;
+          --text: #e7ece8;
+          --muted: #9aa79e;
+          --accent: #4cb46e;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      img {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 20px 0 6px;
+      }
+      p {
+        margin: 0 0 20px;
+        color: var(--muted);
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        min-height: 44px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--accent);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="" />
+      <h1>Sem conexão</h1>
+      <p>O Pelada precisa de internet para mostrar a fila e o placar atualizados.</p>
+      <button type="button" onclick="location.reload()">Tentar de novo</button>
+    </main>
+    <script>
+      window.addEventListener("online", () => location.reload());
+    </script>
+  </body>
+</html>

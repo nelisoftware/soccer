@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { DiaDTO, JogadorDTO } from "@/lib/dal";
-import type { ConfigSala } from "@/lib/engine";
+import { useMemo, useOptimistic, useState } from "react";
+import type { AssiduidadeDTO, DiaDTO, JogadorDTO } from "@/lib/dal";
+import type { ConfigSala, EstadoDia } from "@/lib/engine";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { CabecalhoSala } from "@/components/CabecalhoSala";
 import { IconeDesfazer } from "@/components/icones";
@@ -30,6 +30,7 @@ export function PainelJogo({
   editavel,
   agoraServidor,
   avulsosPagos,
+  assiduidade,
 }: {
   codigo: string;
   config: ConfigSala;
@@ -38,6 +39,7 @@ export function PainelJogo({
   editavel: boolean;
   agoraServidor: number;
   avulsosPagos: string[];
+  assiduidade: Record<string, AssiduidadeDTO>;
 }) {
   const { executar, pendente, erro, limparErro } = useAcao();
   const [abaEscolhida, setAba] = useState<Aba | null>(null);
@@ -53,6 +55,22 @@ export function PainelJogo({
   }, [jogadores, config]);
 
   const pagos = useMemo(() => new Set(avulsosPagos), [avulsosPagos]);
+
+  /**
+   * Estado mostrado na tela: o do servidor, com as ações otimistas em andamento
+   * aplicadas por cima (ex.: o gol aparece na hora, sem esperar o servidor).
+   */
+  const [estadoTela, aplicarOtimista] = useOptimistic(
+    dia?.estado ?? null,
+    (estado: EstadoDia | null, regra: (e: EstadoDia) => EstadoDia) => {
+      if (!estado) return estado;
+      try {
+        return regra(estado);
+      } catch {
+        return estado; // Regra recusou (ErroRegra): o servidor vai responder com o erro.
+      }
+    },
+  );
 
   if (!dia) {
     return (
@@ -88,10 +106,15 @@ export function PainelJogo({
 
   const acao: AcoesJogo = {
     codigo,
-    dia,
+    dia: { ...dia, estado: estadoTela ?? dia.estado },
     editavel,
     pendente,
-    rodar: (fn, aoConcluir) => executar(() => fn(codigo, dia.id, dia.versao), aoConcluir),
+    rodar: (fn, aoConcluir, otimista) =>
+      executar(
+        () => fn(codigo, dia.id, dia.versao),
+        aoConcluir,
+        otimista && (() => aplicarOtimista(otimista)),
+      ),
   };
 
   const temQuadra = dia.estado.emQuadra.length > 0;
@@ -149,7 +172,7 @@ export function PainelJogo({
 
       <div className="xl:grid xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.5fr)_minmax(0,0.85fr)] xl:gap-6 xl:items-start">
         <section className={cx(aba !== "chegada" && "hidden", "xl:block")} aria-label="Chegada">
-          <Chegada acao={acao} dados={dados} avulsosPagos={pagos} />
+          <Chegada acao={acao} dados={dados} avulsosPagos={pagos} assiduidade={assiduidade} />
         </section>
         <section className={cx(aba !== "quadra" && "hidden", "xl:block")} aria-label="Quadra">
           <Quadra acao={acao} dados={dados} agoraServidor={agoraServidor} />

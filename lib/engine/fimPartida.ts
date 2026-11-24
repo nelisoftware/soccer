@@ -1,6 +1,6 @@
 import { corDoTime, resolverCor, type CorTime } from "../cores";
 import { ErroRegra, type Contexto, type EstadoDia, type Resultado } from "./types";
-import { partidaZerada, tempoDecorridoMs } from "./chegada";
+import { partidaZerada, tempoDecorridoMs, temposDaPartida } from "./chegada";
 import { formarTimesDaFila } from "./formarTimes";
 import { clonar, embaralhar, usaFilaGoleiros } from "./util";
 
@@ -19,6 +19,13 @@ export function timesQueSaem(estado: EstadoDia, resultado: Resultado, ctx: Conte
   const vitorias = estado.emQuadra[vencedor].vitoriasSeguidas + 1;
   if (max > 0 && vitorias >= max) return [vencedor, perdedor];
   return [perdedor];
+}
+
+/** O empate é decidido no sorteio (ordem de saída ou quem sai)? */
+export function empateSorteado(estado: EstadoDia, resultado: Resultado, ctx: Contexto): boolean {
+  if (resultado !== "empate") return false;
+  if (ctx.config.regraEmpate === "saemOsDois") return true;
+  return estado.emQuadra[0].entrouEm === estado.emQuadra[1].entrouEm;
 }
 
 /** Cor escolhida para o time que entra em cada lado (sem escolha = herda a cor de quem saiu). */
@@ -49,12 +56,34 @@ export function finalizarPartida(
     // Cópia de nome e tom: o histórico continua certo mesmo se a cor sair da sala depois.
     cores: [resolverCor(coresAntes[0], ctx.config.cores), resolverCor(coresAntes[1], ctx.config.cores)],
     placar: [...e.partida.placar],
+    ...(e.partida.gols?.length ? { gols: [...e.partida.gols] } : {}),
     resultado,
     fimEm: ctx.agora,
     duracaoMs: tempoDecorridoMs(e.partida, ctx.agora),
+    tempos: temposDaPartida(
+      e.partida,
+      e.emQuadra.flatMap((t) => [...t.jogadores, ...(t.goleiro ? [t.goleiro] : [])]),
+      ctx.agora,
+    ),
+    ...(empateSorteado(estado, resultado, ctx) && {
+      sorteioEmpate: {
+        regra: ctx.config.regraEmpate,
+        vencedor: (ctx.config.regraEmpate === "saemOsDois" ? saem[0] : saem[0] === 0 ? 1 : 0) as 0 | 1,
+      },
+    }),
   });
 
   if (resultado !== "empate") e.emQuadra[resultado].vitoriasSeguidas++;
+
+  // Substitutos temporários: no time que sai, voltam ao lugar deles na fila (time de espera);
+  // no time que fica, viram titulares e deixam a fila.
+  e.emQuadra.forEach((t, idx) => {
+    const temps = t.temporarios ?? [];
+    if (temps.length === 0) return;
+    if (saem.includes(idx)) t.jogadores = t.jogadores.filter((id) => !temps.includes(id));
+    else e.fila = e.fila.filter((id) => !temps.includes(id));
+    delete t.temporarios;
+  });
 
   for (const idx of saem) {
     const t = e.emQuadra[idx];

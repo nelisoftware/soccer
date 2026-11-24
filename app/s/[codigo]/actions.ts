@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { SemPermissao, exigirEdicao } from "@/lib/auth";
@@ -64,15 +64,19 @@ async function mutarDia(
     const id = idSchema.parse(diaId);
     const v = z.number().int().min(0).parse(versao);
     const sala = await salaEditavel(codigo);
-    const [dia] = await db()
-      .select()
-      .from(schema.diasDeJogo)
-      .where(and(eq(schema.diasDeJogo.id, id), eq(schema.diasDeJogo.salaId, sala.id)))
-      .limit(1);
+    // Dia e jogadores (contexto do motor) não dependem um do outro: busca em paralelo.
+    const [[dia], ctx] = await Promise.all([
+      db()
+        .select()
+        .from(schema.diasDeJogo)
+        .where(and(eq(schema.diasDeJogo.id, id), eq(schema.diasDeJogo.salaId, sala.id)))
+        .limit(1),
+      contexto(sala),
+    ]);
     if (!dia || dia.encerrado) throw new ErroAcao("Dia de jogo não encontrado ou já encerrado.");
     if (dia.versao !== v) return { ok: false, erro: "A sala mudou enquanto você mexia. Confira e tente de novo.", conflito: true };
 
-    const novo = regra(dia.estado, await contexto(sala));
+    const novo = regra(dia.estado, ctx);
     const atualizados = await db()
       .update(schema.diasDeJogo)
       .set({ estado: novo, versao: v + 1 })
@@ -82,27 +86,28 @@ async function mutarDia(
       return { ok: false, erro: "A sala mudou enquanto você mexia. Confira e tente de novo.", conflito: true };
     }
 
-    await db().insert(schema.historicoEstado).values({ diaId: id, estado: dia.estado, descricao });
-    const recentes = await db()
-      .select({ id: schema.historicoEstado.id })
-      .from(schema.historicoEstado)
-      .where(eq(schema.historicoEstado.diaId, id))
-      .orderBy(desc(schema.historicoEstado.id))
-      .limit(MAX_HISTORICO);
-    if (recentes.length === MAX_HISTORICO) {
-      await db()
-        .delete(schema.historicoEstado)
-        .where(
-          and(
-            eq(schema.historicoEstado.diaId, id),
-            notInArray(
-              schema.historicoEstado.id,
-              recentes.map((r) => r.id),
-            ),
-          ),
-        );
-    }
+    await guardarParaDesfazer(id, dia.estado, descricao);
   });
+}
+
+/**
+ * Guarda o estado anterior (para o "Desfazer") e apaga os mais antigos, mantendo
+ * MAX_HISTORICO por dia, numa única ida ao banco. O DELETE não enxerga a linha
+ * recém-inserida (mesmo snapshot), por isso mantém MAX_HISTORICO - 1 antigas + a nova.
+ */
+async function guardarParaDesfazer(diaId: string, estado: EstadoDia, descricao: string) {
+  const h = schema.historicoEstado;
+  await db().execute(sql`
+    with novo as (
+      insert into ${h} (dia_id, estado, descricao)
+      values (${diaId}, ${JSON.stringify(estado)}::jsonb, ${descricao})
+    )
+    delete from ${h}
+    where ${h.diaId} = ${diaId}
+      and ${h.id} not in (
+        select ${h.id} from ${h} where ${h.diaId} = ${diaId} order by ${h.id} desc limit ${MAX_HISTORICO - 1}
+      )
+  `);
 }
 
 // ---------- Dia de jogo ----------
@@ -175,9 +180,16 @@ export async function sortearTimes(codigo: string, diaId: string, versao: number
   return mutarDia(codigo, diaId, versao, "Sorteio", (e, ctx) => motor.sortearTimes(e, ctx));
 }
 
-export async function substituir(codigo: string, diaId: string, versao: number, jogadorId: string, volta: boolean) {
-  return mutarDia(codigo, diaId, versao, "Substituição", (e, ctx) =>
-    motor.substituir(e, idSchema.parse(jogadorId), z.boolean().parse(volta), ctx),
+export async function substituir(
+  codigo: string,
+  diaId: string,
+  versao: number,
+  jogadorId: string,
+  volta: boolean,
+  temporario = false,
+) {
+  return mutarDia(codigo, diaId, versao, temporario ? "Substituição temporária" : "Substituição", (e, ctx) =>
+    motor.substituir(e, idSchema.parse(jogadorId), z.boolean().parse(volta), ctx, z.boolean().parse(temporario)),
   );
 }
 
@@ -193,12 +205,20 @@ export async function controlarCronometro(
   });
 }
 
-export async function marcarGol(codigo: string, diaId: string, versao: number, time: 0 | 1, delta: 1 | -1) {
+export async function marcarGol(
+  codigo: string,
+  diaId: string,
+  versao: number,
+  time: 0 | 1,
+  delta: 1 | -1,
+  autor?: string,
+) {
   return mutarDia(codigo, diaId, versao, "Gol", (e) =>
     motor.marcarGol(
       e,
       z.union([z.literal(0), z.literal(1)]).parse(time),
       z.union([z.literal(-1), z.literal(1)]).parse(delta),
+      autor === undefined ? undefined : idSchema.parse(autor),
     ),
   );
 }

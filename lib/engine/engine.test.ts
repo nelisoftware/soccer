@@ -5,10 +5,12 @@ import {
   estadoInicial,
   finalizarPartida,
   formarTimesDaFila,
+  marcarGol,
   registrarChegada,
   removerDaFila,
   sortearTimes,
   substituir,
+  zerarCronometro,
   type ConfigSala,
   type Contexto,
   type EstadoDia,
@@ -161,6 +163,53 @@ describe("substituição", () => {
     expect(e.fila[0]).toBe(j(10));
   });
 
+  describe("temporária", () => {
+    /** Mario se machuca; o jogador 9 entra emprestado do Time 3. */
+    const comTemporario = () => substituir(estadoExemplo(), "Mario", true, ctx(), true);
+
+    it("quem entra não perde o lugar na fila", () => {
+      const e = comTemporario();
+      expect(e.emQuadra[1].jogadores).toEqual(["Marcus", "Nelis", "Tito", j(9)]);
+      expect(e.emQuadra[1].temporarios).toEqual([j(9)]);
+      expect(e.fila).toEqual([...[9, 10, 11, 12, 13, 14, 15, 16].map(j), "Mario"]);
+    });
+
+    it("outra substituição pula quem já está em quadra como temporário", () => {
+      const e = substituir(comTemporario(), "Wilson", true, ctx());
+      expect(e.emQuadra[0].jogadores).toContain(j(10));
+      expect(e.fila[0]).toBe(j(9));
+    });
+
+    it("time perdeu: o temporário volta e joga com o time dele", () => {
+      const e = finalizarPartida(comTemporario(), 0, ctx());
+      expect(e.emQuadra[1].jogadores).toEqual([j(9), j(10), j(11), j(12)]);
+      expect(e.emQuadra[1].temporarios).toBeUndefined();
+      expect(e.fila).toEqual([j(13), j(14), j(15), j(16), "Mario", "Marcus", "Nelis", "Tito"]);
+      // O histórico registra quem jogou de fato.
+      expect(e.historico[0].times[1]).toEqual(["Marcus", "Nelis", "Tito", j(9)]);
+    });
+
+    it("time ganhou: o temporário fica e o time dele completa com o próximo", () => {
+      const e = finalizarPartida(comTemporario(), 1, ctx());
+      expect(e.emQuadra[1].jogadores).toEqual(["Marcus", "Nelis", "Tito", j(9)]);
+      expect(e.emQuadra[1].temporarios).toBeUndefined();
+      expect(e.emQuadra[0].jogadores).toEqual([j(10), j(11), j(12), j(13)]);
+      expect(e.fila).not.toContain(j(9));
+    });
+
+    it("temporário substituído de novo volta para o lugar dele na fila", () => {
+      const e = substituir(comTemporario(), j(9), true, ctx(), true);
+      expect(e.emQuadra[1].jogadores).toEqual(["Marcus", "Nelis", "Tito", j(10)]);
+      expect(e.emQuadra[1].temporarios).toEqual([j(10)]);
+      expect(e.fila.slice(0, 2)).toEqual([j(9), j(10)]);
+      expect(e.fila).toHaveLength(9);
+    });
+
+    it("não dá para remover da fila quem está em quadra como temporário", () => {
+      expect(() => removerDaFila(comTemporario(), j(9))).toThrow(/temporário/);
+    });
+  });
+
   it("não coloca segundo idoso no time: pega o próximo não idoso", () => {
     const base = estadoExemplo();
     base.fila = ["Idoso3", j(9), j(10)];
@@ -232,6 +281,53 @@ describe("cores dos coletes", () => {
       goleiros: [null, null], placar: [2, 1], resultado: 0, duracaoMs: 480_000 });
     expect(p.times[1]).toEqual(["Mario", "Marcus", "Nelis", "Tito"]);
   });
+
+  it("tempo de cada jogador conta só o trecho em quadra (substituição no meio)", () => {
+    const base = estadoExemplo();
+    base.partida = { iniciadaEm: null, acumuladoMs: 8 * 60_000, placar: [0, 0] };
+    // Aos 8 min, Mario sai e entra o jogador 9.
+    const sub = substituir(base, "Mario", true, ctx());
+    sub.partida.acumuladoMs = 10 * 60_000;
+    const [p] = finalizarPartida(sub, 0, ctx()).historico;
+    expect(p.tempos?.["Mario"]).toBe(8 * 60_000);
+    expect(p.tempos?.[j(9)]).toBe(2 * 60_000);
+    expect(p.tempos?.["Wilson"]).toBe(10 * 60_000);
+    expect(p.tempos?.["Marcus"]).toBe(10 * 60_000);
+  });
+
+  it("gols com autor: somam no placar e vão para o histórico", () => {
+    let e = marcarGol(estadoExemplo(), 0, 1, "Wilson");
+    e = marcarGol(e, 0, 1, "Wilson");
+    e = marcarGol(e, 1, 1); // sem autor
+    e = marcarGol(e, 1, 1, "Mario");
+    expect(e.partida.placar).toEqual([2, 2]);
+    expect(() => marcarGol(e, 0, 1, "Mario")).toThrow(/não está nesse time/);
+    const [p] = finalizarPartida(e, "empate", ctx()).historico;
+    expect(p.gols).toEqual([
+      { id: "Wilson", lado: 0 },
+      { id: "Wilson", lado: 0 },
+      { id: "Mario", lado: 1 },
+    ]);
+  });
+
+  it("tirar gol: sai primeiro o gol sem autor; com autor, sai o gol dele", () => {
+    let e = marcarGol(estadoExemplo(), 0, 1, "Wilson");
+    e = marcarGol(e, 0, 1); // sem autor
+    e = marcarGol(e, 0, -1);
+    expect(e.partida.placar[0]).toBe(1);
+    expect(e.partida.gols).toEqual([{ id: "Wilson", lado: 0 }]);
+    e = marcarGol(e, 0, -1);
+    expect(e.partida.placar[0]).toBe(0);
+    expect(e.partida.gols).toBeUndefined();
+  });
+
+  it("zerar o cronômetro zera também a contagem por jogador", () => {
+    const base = estadoExemplo();
+    base.partida = { iniciadaEm: null, acumuladoMs: 5 * 60_000, placar: [0, 0] };
+    const e = zerarCronometro(substituir(base, "Mario", true, ctx()));
+    expect(e.partida.entradas).toBeUndefined();
+    expect(e.partida.tempoSaiu).toBeUndefined();
+  });
 });
 
 describe("fim de partida", () => {
@@ -273,6 +369,10 @@ describe("fim de partida", () => {
         [9, 10, 11, 12, 13, 14, 15, 16].map(j).sort(),
       );
       ordens.add(e.fila[0]);
+      // Quem ganhou o sorteio é quem foi primeiro para a fila.
+      const { sorteioEmpate } = e.historico.at(-1)!;
+      expect(sorteioEmpate?.regra).toBe("saemOsDois");
+      expect(e.fila[0]).toBe(estadoExemplo().emQuadra[sorteioEmpate!.vencedor].jogadores[0]);
     }
     expect(ordens).toEqual(new Set(["Wilson", "Mario"]));
   });
@@ -284,6 +384,7 @@ describe("fim de partida", () => {
     const e = finalizarPartida(base, "empate", ctx({ regraEmpate: "saiMaisAntigo" }));
     expect(e.emQuadra[1].jogadores).toEqual(["Mario", "Marcus", "Nelis", "Tito"]);
     expect(e.emQuadra[0].jogadores).toEqual([j(9), j(10), j(11), j(12)]);
+    expect(e.historico.at(-1)!.sorteioEmpate).toBeUndefined();
   });
 
   it("goleiro do perdedor vai para o fim da fila de goleiros e o próximo entra", () => {

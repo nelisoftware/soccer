@@ -19,9 +19,14 @@ export function useAcao() {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  /**
+   * @param otimista roda no início da transição (ex.: aplicar um `useOptimistic`), para a
+   *   tela mudar na hora; o React desfaz sozinho quando a transição termina.
+   */
   const executar = useCallback(
-    (acao: () => Promise<RespostaAcao>, aoConcluir?: () => void) => {
+    (acao: () => Promise<RespostaAcao>, aoConcluir?: () => void, otimista?: () => void) => {
       iniciar(async () => {
+        otimista?.();
         try {
           const r = await acao();
           if (!r.ok) mostrarErro(r.erro);

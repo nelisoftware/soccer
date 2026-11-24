@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { AssiduidadeDTO } from "@/lib/dal";
 import type { Posicao } from "@/lib/engine";
 import { IconeBusca, IconeCheck, IconeMais } from "@/components/icones";
 import { Modal } from "@/components/Modal";
@@ -13,10 +14,13 @@ export function Chegada({
   acao,
   dados,
   avulsosPagos,
+  assiduidade,
 }: {
   acao: AcoesJogo;
   dados: DadosJogo;
   avulsosPagos: Set<string>;
+  /** Quem mais veio nos últimos dias de jogo: esses aparecem primeiro nos cards. */
+  assiduidade: Record<string, AssiduidadeDTO>;
 }) {
   const { estado } = acao.dia;
   const [busca, setBusca] = useState("");
@@ -32,9 +36,15 @@ export function Chegada({
   }, [estado]);
 
   const termo = busca.trim().toLowerCase();
+  // Mais assíduos primeiro; empate: quem veio mais recentemente; depois o nome (ordem da consulta).
   const disponiveis = [...dados.jogadores.values()]
     .filter((j) => j.ativo && !noDia.has(j.id))
-    .filter((j) => !termo || j.nome.toLowerCase().includes(termo));
+    .filter((j) => !termo || j.nome.toLowerCase().includes(termo))
+    .sort((a, b) => {
+      const [fa, fb] = [assiduidade[a.id], assiduidade[b.id]];
+      const NUNCA = Number.MAX_SAFE_INTEGER;
+      return (fb?.dias ?? 0) - (fa?.dias ?? 0) || (fa?.ultimo ?? NUNCA) - (fb?.ultimo ?? NUNCA);
+    });
 
   const situacao = (id: string) => {
     if (estado.emQuadra.some((t) => t.jogadores.includes(id) || t.goleiro === id)) return "quadra";

@@ -33,6 +33,11 @@ export function clonar(e: EstadoDia): EstadoDia {
   return structuredClone(e);
 }
 
+/** Quem está em quadra como substituto temporário (e por isso também aparece na fila). */
+export function temporariosEmQuadra(e: EstadoDia): Set<string> {
+  return new Set(e.emQuadra.flatMap((t) => t.temporarios ?? []));
+}
+
 export function ordenarPorChegada(ids: string[], chegada: readonly string[]): string[] {
   const pos = new Map(chegada.map((id, i) => [id, i]));
   return [...ids].sort((a, b) => (pos.get(a) ?? 0) - (pos.get(b) ?? 0));

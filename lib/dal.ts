@@ -103,26 +103,54 @@ export async function listarJogadores(salaId: string, incluirInativos = false): 
 }
 
 export async function buscarDiaAberto(salaId: string): Promise<DiaDTO | null> {
+  const d = schema.diasDeJogo;
+  // "podeDesfazer" vem na mesma consulta (antes era uma segunda ida ao banco).
+  // Coluna qualificada à mão: numa consulta de uma tabela só o Drizzle escreve só "id".
+  const idDia = sql.raw(`"dias_de_jogo"."id"`);
   const [dia] = await db()
-    .select()
-    .from(schema.diasDeJogo)
-    .where(and(eq(schema.diasDeJogo.salaId, salaId), eq(schema.diasDeJogo.encerrado, false)))
-    .orderBy(desc(schema.diasDeJogo.criadoEm))
+    .select({
+      id: d.id,
+      data: d.data,
+      estado: d.estado,
+      versao: d.versao,
+      encerrado: d.encerrado,
+      podeDesfazer: sql<boolean>`exists(select 1 from ${schema.historicoEstado} h where h.dia_id = ${idDia})`,
+    })
+    .from(d)
+    .where(and(eq(d.salaId, salaId), eq(d.encerrado, false)))
+    .orderBy(desc(d.criadoEm))
     .limit(1);
-  if (!dia) return null;
-  const [hist] = await db()
-    .select({ id: schema.historicoEstado.id })
-    .from(schema.historicoEstado)
-    .where(eq(schema.historicoEstado.diaId, dia.id))
-    .limit(1);
-  return {
-    id: dia.id,
-    data: dia.data,
-    estado: dia.estado,
-    versao: dia.versao,
-    encerrado: dia.encerrado,
-    podeDesfazer: Boolean(hist),
-  };
+  return dia ?? null;
+}
+
+/** Assiduidade de um jogador nos últimos dias de jogo encerrados da sala. */
+export interface AssiduidadeDTO {
+  /** Em quantos desses dias ele chegou. */
+  dias: number;
+  /** Posição do dia mais recente em que veio (0 = último dia de jogo). */
+  ultimo: number;
+}
+
+/**
+ * Quem mais veio nos últimos `limite` dias de jogo encerrados.
+ * Lê só a lista de chegada de cada dia (não o estado inteiro).
+ */
+export async function assiduidade(salaId: string, limite = 20): Promise<Record<string, AssiduidadeDTO>> {
+  const d = schema.diasDeJogo;
+  const dias = await db()
+    .select({ chegada: sql<string[] | null>`${d.estado}->'chegada'` })
+    .from(d)
+    .where(and(eq(d.salaId, salaId), eq(d.encerrado, true)))
+    .orderBy(desc(d.data), desc(d.criadoEm))
+    .limit(limite);
+  const r: Record<string, AssiduidadeDTO> = {};
+  dias.forEach(({ chegada }, i) => {
+    for (const id of new Set(Array.isArray(chegada) ? chegada : [])) {
+      const a = (r[id] ??= { dias: 0, ultimo: i });
+      a.dias++;
+    }
+  });
+  return r;
 }
 
 export interface DiaResumoDTO {

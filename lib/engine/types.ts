@@ -52,6 +52,17 @@ export interface TimeEmQuadra {
   entrouEm: number;
   /** Cor do colete. Ausente em estados antigos: usa a cor padrão do lado (ver corDoTime). */
   cor?: CorTime;
+  /**
+   * Substitutos temporários (também em `jogadores`). Continuam na fila, no lugar
+   * deles: se o time sair, voltam para o time de espera; se ficar, viram titulares.
+   */
+  temporarios?: string[];
+}
+
+/** Gol com autor: `lado` é o time que ganhou o gol. */
+export interface Gol {
+  id: string;
+  lado: 0 | 1;
 }
 
 export interface Partida {
@@ -59,6 +70,12 @@ export interface Partida {
   iniciadaEm: number | null;
   acumuladoMs: number;
   placar: [number, number];
+  /** Gols com autor, em ordem. O placar pode ter mais gols (marcados sem autor). */
+  gols?: Gol[];
+  /** Tempo de jogo (ms) em que entrou quem entrou no meio da partida (substituição). */
+  entradas?: Record<string, number>;
+  /** Tempo (ms) já jogado nesta partida por quem saiu numa substituição. */
+  tempoSaiu?: Record<string, number>;
 }
 
 export type Resultado = 0 | 1 | "empate";
@@ -75,6 +92,19 @@ export interface PartidaRegistrada {
   cores?: [CorSala | CorTime, CorSala | CorTime];
   /** Tempo de bola rolando, em ms. */
   duracaoMs?: number;
+  /**
+   * Tempo em quadra (ms) de cada jogador nesta partida, incluindo quem saiu
+   * numa substituição. Ausente em registros antigos: vale `duracaoMs` para os times.
+   */
+  tempos?: Record<string, number>;
+  /** Gols com autor (ausente em registros antigos). */
+  gols?: Gol[];
+  /**
+   * Empate decidido no sorteio. `vencedor` é o lado que ganhou:
+   * - "saemOsDois": o que vai primeiro para a fila (volta antes);
+   * - "saiMaisAntigo" (entraram juntos): o que fica em quadra.
+   */
+  sorteioEmpate?: { regra: RegraEmpate; vencedor: 0 | 1 };
 }
 
 export interface EstadoDia {

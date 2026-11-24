@@ -3,19 +3,33 @@
 import { useState } from "react";
 import {
   finalizarPartida,
-  podeEntrarNoTime,
+  formarTimesDaFila,
+  golsPorJogador,
+  marcarGol,
+  proximoSubstituto,
   timesQueSaem,
   type CoresEntrada,
   type TimeEmQuadra,
 } from "@/lib/engine";
 import { corDoTime, estiloTimes, nomeTime, resolverCor, varsCor, type CorTime } from "@/lib/cores";
 import { Cronometro } from "@/components/Cronometro";
-import { IconeBaixo, IconeMais, IconeMenos, IconePausa, IconePlay, IconeTrofeu, IconeZerar } from "@/components/icones";
+import {
+  IconeBaixo,
+  IconeBola,
+  IconeMais,
+  IconeMenos,
+  IconePausa,
+  IconePlay,
+  IconeTroca,
+  IconeTrofeu,
+  IconeZerar,
+} from "@/components/icones";
 import { Modal } from "@/components/Modal";
 import { Botao, Cartao, Selo, cx } from "@/components/ui";
 import * as acoes from "../actions";
-import { LinhaJogador } from "./LinhaJogador";
+import { LinhaJogador, SelosJogador } from "./LinhaJogador";
 import { SeletorCor } from "./SeletorCor";
+import { SorteioEmpate } from "./SorteioEmpate";
 import { nome, type AcoesJogo, type DadosJogo } from "./tipos";
 
 const COR = [
@@ -35,12 +49,29 @@ export function Quadra({
   const { estado } = acao.dia;
   const { config } = dados;
   const [substituindo, setSubstituindo] = useState<string | null>(null);
+  /** Substituição temporária: quem entra guarda o lugar na fila. */
+  const [subTemporaria, setSubTemporaria] = useState(false);
   /** "confirmar": placar já define o vencedor; "escolher": empate (ou correção manual). */
   const [finalizando, setFinalizando] = useState<false | "confirmar" | "escolher">(false);
   /** Lado cujo colete está sendo trocado no placar. */
   const [trocandoCor, setTrocandoCor] = useState<0 | 1 | null>(null);
   /** Cor escolhida para quem entra, no fim da partida. */
   const [coresEntrada, setCoresEntrada] = useState<CoresEntrada>({});
+  /** Número da partida cujo sorteio de empate está sendo mostrado. */
+  const [sorteioDe, setSorteioDe] = useState<number | null>(null);
+  /**
+   * Quando entra uma partida nova no histórico (finalizada aqui ou por outra pessoa)
+   * e o empate foi sorteado, mostra a animação. Ajuste de estado durante o render
+   * (padrão do React para reagir a props), sem efeito.
+   */
+  const totalPartidas = estado.historico.length;
+  const [partidasVistas, setPartidasVistas] = useState(totalPartidas);
+  if (totalPartidas !== partidasVistas) {
+    setPartidasVistas(totalPartidas);
+    const ultima = estado.historico[totalPartidas - 1];
+    if (totalPartidas > partidasVistas && ultima?.sorteioEmpate) setSorteioDe(ultima.numero);
+  }
+  const partidaSorteio = estado.historico.find((p) => p.numero === sorteioDe);
 
   if (estado.emQuadra.length === 0) {
     const necessarios = config.jogadoresPorTime * 2;
@@ -79,6 +110,7 @@ export function Quadra({
   }
 
   const { partida } = estado;
+  const golsNaPartida = golsPorJogador(partida.gols);
   const rodando = partida.iniciadaEm !== null;
   const chavePartida = `${estado.historico.length}`;
   const atingiuGols =
@@ -105,15 +137,29 @@ export function Quadra({
     ? undefined
     : ehGoleiroSub
       ? estado.filaGoleiros[0]
-      : estado.fila.find((id) => podeEntrarNoTime(dados.ctx, id, timeSub.jogadores.filter((x) => x !== substituindo)));
+      : proximoSubstituto(estado, timeSub.jogadores.filter((x) => x !== substituindo), dados.ctx);
+  /** Quem sai é um substituto temporário (tem lugar guardado na fila). */
+  const saiTemporario = !!substituindo && !!timeSub?.temporarios?.includes(substituindo);
+  const temporaria = subTemporaria && !ehGoleiroSub && !!entra;
+  /** Time de espera de quem entra (ex.: "Time 3"), para explicar a temporária. */
+  const timeDeQuemEntra = (() => {
+    if (!entra || ehGoleiroSub) return null;
+    const i = formarTimesDaFila(estado.fila, dados.ctx).findIndex((t) => t.includes(entra));
+    return i >= 0 ? `Time ${i + 3}` : null;
+  })();
+  const abrirSub = (id: string | null) => {
+    setSubTemporaria(false);
+    setSubstituindo(id);
+  };
 
   return (
     <div className="space-y-4 @container" style={estiloTimes([R(cores[0]), R(cores[1])])}>
       {/* Placar e cronômetro (layout pela largura da coluna, não da tela) */}
       <Cartao className="p-4 md:p-5">
-        <div className="grid grid-cols-2 @lg:grid-cols-[1fr_auto_1fr] items-start gap-2 @lg:gap-4">
+        {/* minmax(0,1fr) + min-w-0: sem isso a coluna não encolhe abaixo do nome e ele vaza do cartão. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 @lg:gap-4">
           {[0, 1].map((i) => (
-            <div key={i} className={cx("flex flex-col items-center", i === 0 ? "@lg:order-1" : "@lg:order-3")}>
+            <div key={i} className={cx("min-w-0 flex flex-col items-center", i === 0 ? "@lg:order-1" : "@lg:order-3")}>
               {acao.editavel ? (
                 <button
                   type="button"
@@ -129,11 +175,12 @@ export function Quadra({
                   <span
                     className={cx("h-6 w-6 shrink-0 aspect-square rounded-full ring-1 ring-inset ring-black/20", COR[i].tinta)}
                   />
-                  <span className="min-w-0 truncate">{N(i)}</span>
+                  {/* Só o nome da cor: a bolinha já indica que é o time; poupa espaço ao lado do cronômetro. */}
+                  <span className="min-w-0 truncate">{R(cores[i]).nome}</span>
                   <IconeBaixo width={14} height={14} className="shrink-0" />
                 </button>
               ) : (
-                <span className={cx("text-sm font-bold uppercase tracking-wide", COR[i].texto)}>{N(i)}</span>
+                <span className={cx("max-w-full truncate text-sm font-bold uppercase tracking-wide", COR[i].texto)}>{N(i)}</span>
               )}
               <span className="tabular text-5xl @lg:text-6xl font-bold leading-tight">{partida.placar[i]}</span>
               {acao.editavel && (
@@ -142,7 +189,13 @@ export function Quadra({
                     type="button"
                     aria-label={`Tirar gol do ${N(i)}`}
                     disabled={acao.pendente || partida.placar[i] === 0}
-                    onClick={() => acao.rodar((c, d, v) => acoes.marcarGol(c, d, v, i as 0 | 1, -1))}
+                    onClick={() =>
+                      acao.rodar(
+                        (c, d, v) => acoes.marcarGol(c, d, v, i as 0 | 1, -1),
+                        undefined,
+                        (e) => marcarGol(e, i as 0 | 1, -1),
+                      )
+                    }
                     className="h-11 w-11 inline-flex items-center justify-center rounded-xl border border-line text-muted disabled:opacity-40"
                   >
                     <IconeMenos />
@@ -151,7 +204,13 @@ export function Quadra({
                     type="button"
                     aria-label={`Gol do ${N(i)}`}
                     disabled={acao.pendente}
-                    onClick={() => acao.rodar((c, d, v) => acoes.marcarGol(c, d, v, i as 0 | 1, 1))}
+                    onClick={() =>
+                      acao.rodar(
+                        (c, d, v) => acoes.marcarGol(c, d, v, i as 0 | 1, 1),
+                        undefined,
+                        (e) => marcarGol(e, i as 0 | 1, 1),
+                      )
+                    }
                     className={cx(
                       "h-11 w-14 inline-flex items-center justify-center rounded-xl disabled:opacity-40",
                       i === 0 ? "bg-team-a text-team-a-on" : "bg-team-b text-team-b-on",
@@ -224,20 +283,18 @@ export function Quadra({
               <span className="text-xs text-muted">{time.jogadores.length} jog.</span>
             </div>
             <ul className="divide-y divide-line">
-              {time.goleiro && (
-                <li>
-                  <LinhaJogador
-                    j={dados.jogadores.get(time.goleiro)}
-                    goleiro
-                    onClick={acao.editavel ? () => setSubstituindo(time.goleiro) : undefined}
-                  />
-                </li>
-              )}
-              {time.jogadores.map((id) => (
+              {[...(time.goleiro ? [time.goleiro] : []), ...time.jogadores].map((id) => (
                 <li key={id}>
-                  <LinhaJogador
-                    j={dados.jogadores.get(id)}
-                    onClick={acao.editavel ? () => setSubstituindo(id) : undefined}
+                  <JogadorEmQuadra
+                    id={id}
+                    lado={i as 0 | 1}
+                    goleiro={id === time.goleiro}
+                    temporario={!!time.temporarios?.includes(id)}
+                    gols={golsNaPartida.get(id) ?? 0}
+                    acao={acao}
+                    dados={dados}
+                    nomeTime={N(i)}
+                    onSubstituir={() => abrirSub(id)}
                   />
                 </li>
               ))}
@@ -245,18 +302,53 @@ export function Quadra({
           </Cartao>
         ))}
       </div>
-      {acao.editavel && <p className="text-center text-sm text-muted">Toque em um jogador para substituir.</p>}
+      {acao.editavel && (
+        <p className="text-center text-sm text-muted">
+          <IconeBola width={14} height={14} className="inline -mt-0.5" /> gol do jogador ·{" "}
+          <IconeTroca width={14} height={14} className="inline -mt-0.5" /> substituir
+        </p>
+      )}
 
       {/* Substituição */}
       <Modal aberto={!!substituindo} titulo={`Substituir ${jogadorSub?.nome ?? ""}`} onFechar={() => setSubstituindo(null)}>
+        {!ehGoleiroSub && entra && (
+          <div role="radiogroup" aria-label="Tipo de substituição" className="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
+            {[
+              { temp: false, rotulo: "Definitiva" },
+              { temp: true, rotulo: "Temporária" },
+            ].map((o) => (
+              <button
+                key={o.rotulo}
+                type="button"
+                role="radio"
+                aria-checked={subTemporaria === o.temp}
+                onClick={() => setSubTemporaria(o.temp)}
+                className={cx(
+                  "min-h-10 rounded-lg text-sm font-semibold transition",
+                  subTemporaria === o.temp ? "bg-surface text-ink shadow-sm" : "text-muted",
+                )}
+              >
+                {o.rotulo}
+              </button>
+            ))}
+          </div>
+        )}
         <p className="text-muted mb-4">
-          {entra ? (
+          {!entra ? (
+            <>Ninguém disponível na {ehGoleiroSub ? "fila de goleiros" : "fila"}: o time fica com um a menos.</>
+          ) : temporaria ? (
+            <>
+              Entra <strong className="text-ink">{nome(dados, entra)}</strong>
+              {timeDeQuemEntra && <> ({timeDeQuemEntra})</>} só para completar, sem perder o lugar na fila. Se o time{" "}
+              <strong className="text-ink">perder</strong>, ele volta e joga com o time dele. Se{" "}
+              <strong className="text-ink">ganhar</strong>, ele fica em quadra e o time dele completa com o próximo da
+              fila.
+            </>
+          ) : (
             <>
               Entra <strong className="text-ink">{nome(dados, entra)}</strong>, o próximo da{" "}
               {ehGoleiroSub ? "fila de goleiros" : "fila"}. Os times de espera sobem.
             </>
-          ) : (
-            <>Ninguém disponível na {ehGoleiroSub ? "fila de goleiros" : "fila"}: o time fica com um a menos.</>
           )}
         </p>
         <div className="grid gap-2">
@@ -266,12 +358,12 @@ export function Quadra({
             disabled={acao.pendente}
             onClick={() =>
               acao.rodar(
-                (c, d, v) => acoes.substituir(c, d, v, substituindo!, true),
+                (c, d, v) => acoes.substituir(c, d, v, substituindo!, true, temporaria),
                 () => setSubstituindo(null),
               )
             }
           >
-            Sai e volta pro fim da fila
+            {saiTemporario ? "Sai e volta pro lugar dele na fila" : "Sai e volta pro fim da fila"}
           </Botao>
           <Botao
             variante="perigo"
@@ -279,7 +371,7 @@ export function Quadra({
             disabled={acao.pendente}
             onClick={() =>
               acao.rodar(
-                (c, d, v) => acoes.substituir(c, d, v, substituindo!, false),
+                (c, d, v) => acoes.substituir(c, d, v, substituindo!, false, temporaria),
                 () => setSubstituindo(null),
               )
             }
@@ -442,6 +534,88 @@ export function Quadra({
           ))}
         </div>
       </Modal>
+
+      {partidaSorteio?.sorteioEmpate && (
+        <SorteioEmpate
+          key={partidaSorteio.numero}
+          partida={{ ...partidaSorteio, sorteioEmpate: partidaSorteio.sorteioEmpate }}
+          coresSala={sala}
+          onFechar={() => setSorteioDe(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Linha de um jogador em quadra: nome, gols na partida e botões de gol e substituição. */
+function JogadorEmQuadra({
+  id,
+  lado,
+  goleiro,
+  temporario,
+  gols,
+  acao,
+  dados,
+  nomeTime,
+  onSubstituir,
+}: {
+  id: string;
+  lado: 0 | 1;
+  goleiro: boolean;
+  temporario: boolean;
+  gols: number;
+  acao: AcoesJogo;
+  dados: DadosJogo;
+  nomeTime: string;
+  onSubstituir: () => void;
+}) {
+  const j = dados.jogadores.get(id);
+  const nomeJ = j?.nome ?? "?";
+  const botao =
+    "h-9 w-9 shrink-0 inline-flex items-center justify-center rounded-lg border border-line disabled:opacity-40";
+  return (
+    <div className="flex items-center gap-1.5 min-h-11 pl-3 pr-1.5 py-1">
+      <span className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        <span className="truncate font-medium">{nomeJ}</span>
+        <SelosJogador j={j} goleiro={goleiro} />
+        {temporario && <Selo tom="aviso">temp.</Selo>}
+        {gols > 0 && (
+          <span
+            className={cx("inline-flex items-center gap-0.5 text-xs font-bold tabular", COR[lado].texto)}
+            aria-label={`${gols} gol${gols > 1 ? "s" : ""}`}
+          >
+            <IconeBola width={13} height={13} />
+            {gols}
+          </span>
+        )}
+      </span>
+      {acao.editavel && (
+        <>
+          <button
+            type="button"
+            aria-label={`Gol de ${nomeJ} (${nomeTime})`}
+            disabled={acao.pendente}
+            onClick={() =>
+              acao.rodar(
+                (c, d, v) => acoes.marcarGol(c, d, v, lado, 1, id),
+                undefined,
+                (e) => marcarGol(e, lado, 1, id),
+              )
+            }
+            className={cx(botao, COR[lado].texto, "hover:bg-surface-2 active:scale-95 transition")}
+          >
+            <IconeBola width={18} height={18} />
+          </button>
+          <button
+            type="button"
+            aria-label={`Substituir ${nomeJ}`}
+            onClick={onSubstituir}
+            className={cx(botao, "text-muted hover:bg-surface-2 hover:text-ink")}
+          >
+            <IconeTroca width={18} height={18} />
+          </button>
+        </>
+      )}
     </div>
   );
 }

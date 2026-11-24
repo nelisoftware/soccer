@@ -1,13 +1,26 @@
 "use client";
 
-import { formarTimesDaFila } from "@/lib/engine";
+import { formarTimesDaFila, temporariosEmQuadra } from "@/lib/engine";
 import { IconeBaixo, IconeCima, IconeX } from "@/components/icones";
 import { Cartao, Selo, Titulo, cx } from "@/components/ui";
 import * as acoes from "../actions";
 import { LinhaJogador } from "./LinhaJogador";
 import type { AcoesJogo, DadosJogo } from "./tipos";
 
-function BotoesFila({ id, acao, primeiro, ultimo }: { id: string; acao: AcoesJogo; primeiro: boolean; ultimo: boolean }) {
+function BotoesFila({
+  id,
+  acao,
+  primeiro,
+  ultimo,
+  semRemover,
+}: {
+  id: string;
+  acao: AcoesJogo;
+  primeiro: boolean;
+  ultimo: boolean;
+  /** Temporário em quadra: sai pela substituição, não pela fila. */
+  semRemover?: boolean;
+}) {
   const base =
     "h-9 w-9 inline-flex items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-30";
   return (
@@ -34,7 +47,7 @@ function BotoesFila({ id, acao, primeiro, ultimo }: { id: string; acao: AcoesJog
         type="button"
         aria-label="Foi embora (remover da fila)"
         className={cx(base, "hover:text-danger")}
-        disabled={acao.pendente}
+        disabled={acao.pendente || semRemover}
         onClick={() => acao.rodar((c, d, v) => acoes.removerDaFila(c, d, v, id))}
       >
         <IconeX width={18} height={18} />
@@ -49,6 +62,9 @@ export function Fila({ acao, dados }: { acao: AcoesJogo; dados: DadosJogo }) {
   const temQuadra = estado.emQuadra.length > 0;
   const times = temQuadra ? formarTimesDaFila(estado.fila, dados.ctx) : [];
   const posicao = new Map(estado.fila.map((id, i) => [id, i]));
+  /** Substitutos temporários: jogam em quadra, mas guardam o lugar no time de espera. */
+  const temporarios = temporariosEmQuadra(estado);
+  const algumTemporario = temporarios.size > 0;
 
   return (
     <div className="space-y-4">
@@ -103,15 +119,29 @@ export function Fila({ acao, dados }: { acao: AcoesJogo; dados: DadosJogo }) {
                 <ul className="divide-y divide-line">
                   {time.map((id) => {
                     const p = posicao.get(id) ?? 0;
+                    const emprestado = temporarios.has(id);
                     return (
                       <li key={id}>
                         <LinhaJogador
                           j={dados.jogadores.get(id)}
                           numero={p + 1}
                           direita={
-                            acao.editavel && (
-                              <BotoesFila id={id} acao={acao} primeiro={p === 0} ultimo={p === estado.fila.length - 1} />
-                            )
+                            <>
+                              {emprestado && (
+                                <Selo tom="aviso" className="shrink-0">
+                                  Em quadra
+                                </Selo>
+                              )}
+                              {acao.editavel && (
+                                <BotoesFila
+                                  id={id}
+                                  acao={acao}
+                                  primeiro={p === 0}
+                                  ultimo={p === estado.fila.length - 1}
+                                  semRemover={emprestado}
+                                />
+                              )}
+                            </>
                           }
                         />
                       </li>
@@ -121,6 +151,12 @@ export function Fila({ acao, dados }: { acao: AcoesJogo; dados: DadosJogo }) {
                 {incompleto && (
                   <p className="px-3 py-2 text-xs text-muted border-t border-line">
                     Completa com os primeiros do time que perder.
+                  </p>
+                )}
+                {algumTemporario && time.some((id) => temporarios.has(id)) && (
+                  <p className="px-3 py-2 text-xs text-muted border-t border-line">
+                    Quem está em quadra completou outro time por um tempo: se aquele time perder, volta para cá; se
+                    ganhar, fica lá e entra o próximo da fila.
                   </p>
                 )}
               </Cartao>

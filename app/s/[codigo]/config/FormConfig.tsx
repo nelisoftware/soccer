@@ -7,6 +7,7 @@ import { CabecalhoSala } from "@/components/CabecalhoSala";
 import { Aviso, useAcao } from "@/components/useAcao";
 import { Botao, Cartao, Interruptor, Titulo, campoClasse, cx } from "@/components/ui";
 import * as acoes from "../actions";
+import { CoresSala } from "./CoresSala";
 
 function Numero({
   id,
@@ -133,6 +134,10 @@ export function FormConfig({ codigo, config, editavel }: { codigo: string; confi
               onMudar={(v) => set("permiteMaisDeUmIdoso", v)}
               desabilitado={off}
             />
+          </Grupo>
+
+          <Grupo titulo="Cores dos coletes">
+            <CoresSala cores={c.cores} onMudar={(v) => set("cores", v)} desabilitado={off} />
           </Grupo>
 
           <Grupo titulo="Partida">

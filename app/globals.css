@@ -68,6 +68,14 @@
   color-scheme: dark;
 }
 
+/* Cores dos times: definidas por bloco em lib/cores.ts (varsCor). Aqui só o padrão. */
+:root {
+  --team-a-on: #ffffff;
+  --team-b-on: #ffffff;
+  --team-a-tinta: var(--team-a);
+  --team-b-tinta: var(--team-b);
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -87,6 +95,10 @@
   --color-team-a-soft: var(--team-a-soft);
   --color-team-b: var(--team-b);
   --color-team-b-soft: var(--team-b-soft);
+  --color-team-a-on: var(--team-a-on);
+  --color-team-b-on: var(--team-b-on);
+  --color-team-a-tinta: var(--team-a-tinta);
+  --color-team-b-tinta: var(--team-b-tinta);
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }

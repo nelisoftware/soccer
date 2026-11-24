@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CONFIG_PADRAO,
+  definirCorTime,
   estadoInicial,
   finalizarPartida,
   formarTimesDaFila,
@@ -176,6 +177,60 @@ describe("substituição", () => {
     const e = substituir(base, "G1", true, c);
     expect(e.emQuadra[0].goleiro).toBe("G2");
     expect(e.filaGoleiros).toEqual(["G1"]);
+  });
+});
+
+describe("cores dos coletes", () => {
+  it("quem entra herda a cor de quem saiu, ou usa a cor escolhida", () => {
+    const base = estadoExemplo();
+    base.emQuadra[0].cor = "branco";
+    base.emQuadra[1].cor = "preto";
+    expect(finalizarPartida(base, 0, ctx()).emQuadra.map((t) => t.cor)).toEqual(["branco", "preto"]);
+    expect(finalizarPartida(base, 0, ctx(), { 1: "amarelo" }).emQuadra.map((t) => t.cor)).toEqual(["branco", "amarelo"]);
+  });
+
+  it("não deixa o time que entra usar a cor do time que fica", () => {
+    const base = estadoExemplo();
+    base.emQuadra[0].cor = "branco";
+    expect(() => finalizarPartida(base, 0, ctx(), { 1: "branco" })).toThrow();
+  });
+
+  it("trocar para a cor do outro time troca os dois", () => {
+    // Sem cor gravada, os times usam as 2 primeiras da sala: preto e azul.
+    const base = estadoExemplo();
+    const e = definirCorTime(base, 0, "azul", ctx());
+    expect(e.emQuadra.map((t) => t.cor)).toEqual(["azul", "preto"]);
+    expect(definirCorTime(e, 1, "amarelo", ctx()).emQuadra.map((t) => t.cor)).toEqual(["azul", "amarelo"]);
+  });
+
+  it("só aceita cores da sala; cores novas da sala passam a valer", () => {
+    const base = estadoExemplo();
+    expect(() => definirCorTime(base, 0, "vinho", ctx())).toThrow();
+    const comVinho = ctx({ cores: [...CONFIG_PADRAO.cores, { id: "vinho", nome: "Vinho", hex: "#7a1f35" }] });
+    expect(definirCorTime(base, 0, "vinho", comVinho).emQuadra[0].cor).toBe("vinho");
+    expect(() => finalizarPartida(base, 0, ctx(), { 1: "vinho" })).toThrow();
+  });
+
+  it("sorteio veste os times com as 2 primeiras cores da sala", () => {
+    const c = ctx();
+    const e = sortearTimes(chegar(CHEGADA_EXEMPLO, c), c);
+    expect(e.emQuadra.map((t) => t.cor)).toEqual(["preto", "azul"]);
+  });
+
+  it("o histórico guarda cores, goleiros, placar e duração", () => {
+    const base = estadoExemplo();
+    base.emQuadra[0].cor = "branco";
+    base.emQuadra[1].cor = "preto";
+    base.partida = { iniciadaEm: null, acumuladoMs: 480_000, placar: [2, 1] };
+    const [p] = finalizarPartida(base, 0, ctx()).historico;
+    expect(p).toMatchObject({
+      numero: 1,
+      cores: [
+        { id: "branco", nome: "Branco", hex: "#ffffff" },
+        { id: "preto", nome: "Preto" },
+      ],
+      goleiros: [null, null], placar: [2, 1], resultado: 0, duracaoMs: 480_000 });
+    expect(p.times[1]).toEqual(["Mario", "Marcus", "Nelis", "Tito"]);
   });
 });
 

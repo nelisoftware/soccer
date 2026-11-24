@@ -9,7 +9,8 @@ import { db, schema } from "@/lib/db";
 import * as motor from "@/lib/engine";
 import { ErroRegra, type Contexto, type EstadoDia } from "@/lib/engine";
 import { OK, type RespostaAcao } from "@/lib/resposta";
-import { configSchema, idSchema, jogadorSchema, mesSchema } from "@/lib/validacao";
+import type { CorTime } from "@/lib/cores";
+import { configSchema, corSchema, idSchema, jogadorSchema, mesSchema } from "@/lib/validacao";
 
 const MAX_HISTORICO = 20;
 
@@ -202,9 +203,26 @@ export async function marcarGol(codigo: string, diaId: string, versao: number, t
   );
 }
 
-export async function finalizarPartida(codigo: string, diaId: string, versao: number, resultado: 0 | 1 | "empate") {
+export async function finalizarPartida(
+  codigo: string,
+  diaId: string,
+  versao: number,
+  resultado: 0 | 1 | "empate",
+  coresEntrada: motor.CoresEntrada = {},
+) {
   return mutarDia(codigo, diaId, versao, "Fim de partida", (e, ctx) =>
-    motor.finalizarPartida(e, z.union([z.literal(0), z.literal(1), z.literal("empate")]).parse(resultado), ctx),
+    motor.finalizarPartida(
+      e,
+      z.union([z.literal(0), z.literal(1), z.literal("empate")]).parse(resultado),
+      ctx,
+      z.object({ 0: corSchema.optional(), 1: corSchema.optional() }).parse(coresEntrada),
+    ),
+  );
+}
+
+export async function definirCorTime(codigo: string, diaId: string, versao: number, lado: 0 | 1, cor: CorTime) {
+  return mutarDia(codigo, diaId, versao, "Cor do time", (e, ctx) =>
+    motor.definirCorTime(e, z.union([z.literal(0), z.literal(1)]).parse(lado), corSchema.parse(cor), ctx),
   );
 }
 

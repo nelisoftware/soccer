@@ -1,4 +1,5 @@
 import { ErroRegra, type Contexto, type EstadoDia, type TimeEmQuadra } from "./types";
+import { corDoTime } from "../cores";
 import { partidaZerada } from "./chegada";
 import { clonar, ehIdoso, embaralhar, ordenarPorChegada, usaFilaGoleiros } from "./util";
 
@@ -44,13 +45,14 @@ export function sortearTimes(estado: EstadoDia, ctx: Contexto): EstadoDia {
 
   const e = clonar(estado);
   e.fila = e.fila.filter((id) => !selecionados.includes(id));
-  const novoTime = (jogadores: string[]): TimeEmQuadra => ({
+  const novoTime = (jogadores: string[], lado: 0 | 1): TimeEmQuadra => ({
     jogadores: ordenarPorChegada(jogadores, e.chegada),
     goleiro: usaFilaGoleiros(ctx) ? (e.filaGoleiros.shift() ?? null) : null,
     vitoriasSeguidas: 0,
     entrouEm: e.seq,
+    cor: corDoTime(undefined, lado, ctx.config.cores),
   });
-  e.emQuadra = [novoTime(a), novoTime(b)];
+  e.emQuadra = [novoTime(a, 0), novoTime(b, 1)];
   e.seq++;
   e.partida = partidaZerada();
   return e;

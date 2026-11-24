@@ -48,7 +48,7 @@ export function FormSala() {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="ex.: bola23.11"
+            placeholder="ex.: peladaTrabalho"
             defaultValue={estado.codigo}
             className={campoClasse}
           />

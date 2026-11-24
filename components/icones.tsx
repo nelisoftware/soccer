@@ -131,6 +131,11 @@ export const IconeCheck = (p: P) => (
     <path d="m5 12.5 4.5 4.5L19 7.5" />
   </Base>
 );
+export const IconeHistorico = (p: P) => (
+  <Base {...p}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4v4h4M12 7.5V12l3 2" />
+  </Base>
+);
 export const IconeTrofeu = (p: P) => (
   <Base {...p}>
     <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5a3 3 0 0 0 3.5 4M16 6h3.5a3 3 0 0 1-3.5 4M12 13v4M8 20h8M9.5 17h5" />

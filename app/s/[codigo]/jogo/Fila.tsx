@@ -129,14 +129,11 @@ export function Fila({ acao, dados }: { acao: AcoesJogo; dados: DadosJogo }) {
         </div>
       )}
 
-      {!config.goleiroNaLista && (
+      {estado.filaGoleiros.length > 0 && (
         <div>
           <Titulo>Fila de goleiros</Titulo>
           <Cartao className="overflow-hidden">
-            {estado.filaGoleiros.length === 0 ? (
-              <p className="p-4 text-sm text-muted">Nenhum goleiro esperando.</p>
-            ) : (
-              <ul className="divide-y divide-line">
+            <ul className="divide-y divide-line">
                 {estado.filaGoleiros.map((id, i) => (
                   <li key={id}>
                     <LinhaJogador
@@ -157,7 +154,6 @@ export function Fila({ acao, dados }: { acao: AcoesJogo; dados: DadosJogo }) {
                   </li>
                 ))}
               </ul>
-            )}
           </Cartao>
         </div>
       )}

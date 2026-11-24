@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx vitest run 2>$null | Select-Object -Last 8; npx tsc --noEmit -p .; \"tsc exit: $LASTEXITCODE\"; npx eslint app lib components; \"eslint exit: $LASTEXITCODE\")"
+    ]
+  }
+}

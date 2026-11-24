@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { IconeBola, IconeCampo, IconeConfig, IconeDinheiro, IconePessoas } from "@/components/icones";
+import {
+  IconeBola,
+  IconeCampo,
+  IconeConfig,
+  IconeDinheiro,
+  IconeHistorico,
+  IconePessoas,
+} from "@/components/icones";
 import { cx } from "@/components/ui";
 
 const ITENS = [
   { rota: "", rotulo: "Jogo", Icone: IconeCampo },
+  { rota: "/historico", rotulo: "Histórico", Icone: IconeHistorico },
   { rota: "/jogadores", rotulo: "Jogadores", Icone: IconePessoas },
   { rota: "/financeiro", rotulo: "Financeiro", Icone: IconeDinheiro },
   { rota: "/config", rotulo: "Config", Icone: IconeConfig },
@@ -56,7 +64,7 @@ export function NavSala() {
 
       {/* Mobile/Tablet: abas fixas embaixo */}
       <nav className="xl:hidden fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
-        <ul className="grid grid-cols-4 max-w-2xl mx-auto">
+        <ul className="grid grid-cols-5 max-w-2xl mx-auto">
           {ITENS.map(({ rota, rotulo, Icone }) => (
             <li key={rota}>
               <Link

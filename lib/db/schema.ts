@@ -24,7 +24,9 @@ export const salas = pgTable(
     config: jsonb("config").$type<ConfigSala>().notNull(),
     tentativasFalhas: integer("tentativas_falhas").notNull().default(0),
     bloqueadoAte: timestamp("bloqueado_ate", { withTimezone: true }),
-    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [uniqueIndex("salas_codigo_idx").on(t.codigo)],
 );
@@ -41,7 +43,9 @@ export const jogadores = pgTable(
     idoso: boolean("idoso").notNull().default(false),
     mensalista: boolean("mensalista").notNull().default(false),
     ativo: boolean("ativo").notNull().default(true),
-    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [index("jogadores_sala_idx").on(t.salaId)],
 );
@@ -57,7 +61,9 @@ export const diasDeJogo = pgTable(
     estado: jsonb("estado").$type<EstadoDia>().notNull(),
     versao: integer("versao").notNull().default(0),
     encerrado: boolean("encerrado").notNull().default(false),
-    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [index("dias_sala_idx").on(t.salaId, t.encerrado)],
 );
@@ -71,7 +77,9 @@ export const historicoEstado = pgTable(
       .references(() => diasDeJogo.id, { onDelete: "cascade" }),
     estado: jsonb("estado").$type<EstadoDia>().notNull(),
     descricao: text("descricao").notNull(),
-    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [index("historico_dia_idx").on(t.diaId, t.id)],
 );
@@ -88,7 +96,9 @@ export const mensalidades = pgTable(
     /** YYYY-MM */
     mes: text("mes").notNull(),
     valor: integer("valor").notNull(),
-    pagoEm: timestamp("pago_em", { withTimezone: true }).notNull().default(sql`now()`),
+    pagoEm: timestamp("pago_em", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
   },
   (t) => [primaryKey({ columns: [t.jogadorId, t.mes] })],
 );
@@ -103,7 +113,9 @@ export const avulsos = pgTable(
       .notNull()
       .references(() => jogadores.id, { onDelete: "cascade" }),
     valor: integer("valor").notNull(),
-    pagoEm: timestamp("pago_em", { withTimezone: true }).notNull().default(sql`now()`),
+    pagoEm: timestamp("pago_em", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
   },
   (t) => [primaryKey({ columns: [t.diaId, t.jogadorId] })],
 );

@@ -1,3 +1,5 @@
+import { CORES_INICIAIS, type CorSala, type CorTime } from "../cores";
+
 export type Posicao = "jogador" | "goleiro";
 
 export interface JogadorInfo {
@@ -25,6 +27,8 @@ export interface ConfigSala {
   /** Valores em centavos. */
   valorAvulso: number;
   valorMensalidade: number;
+  /** Cores de colete que a sala usa (as 2 primeiras vão para o sorteio). */
+  cores: CorSala[];
 }
 
 export const CONFIG_PADRAO: ConfigSala = {
@@ -37,6 +41,7 @@ export const CONFIG_PADRAO: ConfigSala = {
   golsParaEncerrar: 2,
   valorAvulso: 1500,
   valorMensalidade: 5000,
+  cores: CORES_INICIAIS,
 };
 
 export interface TimeEmQuadra {
@@ -45,6 +50,8 @@ export interface TimeEmQuadra {
   vitoriasSeguidas: number;
   /** Sequência de entrada em quadra (menor = está há mais tempo). */
   entrouEm: number;
+  /** Cor do colete. Ausente em estados antigos: usa a cor padrão do lado (ver corDoTime). */
+  cor?: CorTime;
 }
 
 export interface Partida {
@@ -62,6 +69,12 @@ export interface PartidaRegistrada {
   placar: [number, number];
   resultado: Resultado;
   fimEm: number;
+  /** Campos abaixo só existem em partidas registradas depois que foram criados. */
+  goleiros?: [string | null, string | null];
+  /** Cópia das cores na hora da partida (registros antigos guardavam só o id). */
+  cores?: [CorSala | CorTime, CorSala | CorTime];
+  /** Tempo de bola rolando, em ms. */
+  duracaoMs?: number;
 }
 
 export interface EstadoDia {

@@ -48,20 +48,56 @@ export async function revogarEdicao(salaId: string): Promise<void> {
   (await cookies()).delete(nomeCookie(salaId));
 }
 
-export async function podeEditar(salaId: string): Promise<boolean> {
-  const valor = (await cookies()).get(nomeCookie(salaId))?.value;
+function cookieValido(valor: string | undefined, alvo: string): boolean {
   if (!valor) return false;
   const [expiraTxt, assinatura] = valor.split(".");
   const expira = Number(expiraTxt);
   if (!Number.isFinite(expira) || !assinatura || expira * 1000 < Date.now()) return false;
-  const esperado = Buffer.from(assinar(salaId, expira));
+  const esperado = Buffer.from(assinar(alvo, expira));
   const recebido = Buffer.from(assinatura);
   return esperado.length === recebido.length && timingSafeEqual(esperado, recebido);
 }
 
+export async function podeEditar(salaId: string): Promise<boolean> {
+  if (await ehAdmin()) return true;
+  return cookieValido((await cookies()).get(nomeCookie(salaId))?.value, salaId);
+}
+
+// ---------- Administrador geral ----------
+
+/** Código reservado: entrar com ele (e o PIN do admin) abre o painel /admin. */
+export const CODIGO_ADMIN = "admin";
+const COOKIE_ADMIN = "pelada_admin";
+const ALVO_ADMIN = "__admin__";
+const DURACAO_ADMIN_S = 60 * 60 * 12; // 12 horas
+
+export async function concederAdmin(): Promise<void> {
+  const expira = Math.floor(Date.now() / 1000) + DURACAO_ADMIN_S;
+  (await cookies()).set(COOKIE_ADMIN, `${expira}.${assinar(ALVO_ADMIN, expira)}`, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: DURACAO_ADMIN_S,
+  });
+}
+
+export async function revogarAdmin(): Promise<void> {
+  (await cookies()).delete(COOKIE_ADMIN);
+}
+
+/** Este aparelho entrou como administrador (pode editar todas as salas). */
+export async function ehAdmin(): Promise<boolean> {
+  return cookieValido((await cookies()).get(COOKIE_ADMIN)?.value, ALVO_ADMIN);
+}
+
+export async function exigirAdmin(): Promise<void> {
+  if (!(await ehAdmin())) throw new SemPermissao("Entre como administrador para fazer isso.");
+}
+
 export class SemPermissao extends Error {
-  constructor() {
-    super("Digite o PIN da sala para editar.");
+  constructor(mensagem = "Digite o PIN da sala para editar.") {
+    super(mensagem);
     this.name = "SemPermissao";
   }
 }

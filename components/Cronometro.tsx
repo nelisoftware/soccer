@@ -27,32 +27,98 @@ function destravarAudio() {
   if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => {});
 }
 
+/**
+ * Um apito de juiz sintetizado: tom agudo com "trinado" (a bolinha do apito),
+ * um harmônico mais grave para dar corpo e um pouco de sopro (ruído).
+ */
+function apito(ctx: AudioContext, saida: AudioNode, quando: number, duracao: number) {
+  const fim = quando + duracao;
+  const envelope = ctx.createGain();
+  envelope.gain.setValueAtTime(0.0001, quando);
+  envelope.gain.exponentialRampToValueAtTime(1, quando + 0.02);
+  envelope.gain.setValueAtTime(1, fim - 0.05);
+  envelope.gain.exponentialRampToValueAtTime(0.0001, fim);
+  envelope.connect(saida);
+
+  // Trinado: oscila a frequência ~30 vezes por segundo.
+  const trinado = ctx.createOscillator();
+  const profundidade = ctx.createGain();
+  trinado.frequency.value = 30;
+  profundidade.gain.value = 220;
+  trinado.connect(profundidade);
+
+  const tons: [OscillatorType, number, number][] = [
+    ["sine", 2900, 1], // o apito em si
+    ["square", 1450, 0.3], // corpo, ajuda a ouvir em alto-falante pequeno
+  ];
+  for (const [tipo, freq, volume] of tons) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = tipo;
+    osc.frequency.value = freq;
+    profundidade.connect(osc.frequency);
+    g.gain.value = volume;
+    osc.connect(g).connect(envelope);
+    osc.start(quando);
+    osc.stop(fim);
+  }
+  trinado.start(quando);
+  trinado.stop(fim);
+
+  // Sopro: ruído filtrado em volta da frequência do apito.
+  const amostras = Math.ceil(ctx.sampleRate * duracao);
+  const buffer = ctx.createBuffer(1, amostras, ctx.sampleRate);
+  const dados = buffer.getChannelData(0);
+  for (let i = 0; i < amostras; i++) dados[i] = Math.random() * 2 - 1;
+  const ruido = ctx.createBufferSource();
+  ruido.buffer = buffer;
+  const filtro = ctx.createBiquadFilter();
+  filtro.type = "bandpass";
+  filtro.frequency.value = 2900;
+  filtro.Q.value = 4;
+  const gRuido = ctx.createGain();
+  gRuido.gain.value = 0.4;
+  ruido.connect(filtro).connect(gRuido).connect(envelope);
+  ruido.start(quando);
+  ruido.stop(fim);
+}
+
+/** Apito final de juiz (curto, curto, looongo), repetido 2 vezes, no volume máximo. */
 function bipar() {
   const ctx = obterAudio();
   if (ctx) {
     const tocar = () => {
-      const inicio = ctx.currentTime + 0.05;
-      // 3 séries de 3 bipes (agudo, agudo, mais agudo): alarme de fim de tempo.
-      for (let serie = 0; serie < 3; serie++) {
-        [0, 0.2, 0.4].forEach((t, i) => {
-          const quando = inicio + serie * 0.9 + t;
-          const osc = ctx.createOscillator();
-          const ganho = ctx.createGain();
-          osc.type = "square";
-          osc.frequency.value = i === 2 ? 1320 : 880;
-          ganho.gain.setValueAtTime(0.0001, quando);
-          ganho.gain.exponentialRampToValueAtTime(0.3, quando + 0.01);
-          ganho.gain.exponentialRampToValueAtTime(0.0001, quando + 0.18);
-          osc.connect(ganho).connect(ctx.destination);
-          osc.start(quando);
-          osc.stop(quando + 0.2);
-        });
+      // Volume máximo: compressor bem agressivo, ganho alto e um limitador suave
+      // (curva tanh) que segura o pico em 100% — fica alto sem estalar.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -30;
+      compressor.knee.value = 0;
+      compressor.ratio.value = 20;
+      compressor.attack.value = 0.001;
+      compressor.release.value = 0.05;
+      const master = ctx.createGain();
+      master.gain.value = 4;
+      const limitador = ctx.createWaveShaper();
+      const curva = new Float32Array(1024);
+      for (let i = 0; i < curva.length; i++) curva[i] = Math.tanh(((i / (curva.length - 1)) * 2 - 1) * 3);
+      limitador.curve = curva;
+      limitador.oversample = "4x";
+      compressor.connect(master).connect(limitador).connect(ctx.destination);
+
+      let t = ctx.currentTime + 0.05;
+      for (let rep = 0; rep < 2; rep++) {
+        for (const dur of [0.3, 0.3, 1.2]) {
+          apito(ctx, compressor, t, dur);
+          t += dur + 0.15;
+        }
+        t += 0.6;
       }
     };
     if (ctx.state === "suspended") ctx.resume().then(tocar, () => {});
     else tocar();
   }
-  navigator.vibrate?.([300, 150, 300, 150, 300, 400, 300, 150, 300, 150, 300]);
+  // Vibração no mesmo ritmo do apito.
+  navigator.vibrate?.([300, 150, 300, 150, 1200, 750, 300, 150, 300, 150, 1200]);
 }
 
 function mmss(ms: number) {
@@ -109,16 +175,28 @@ export function Cronometro({
   }, [esgotado, rodando, chavePartida]);
 
   return (
-    <div className="text-center" aria-live="polite">
+    <div
+      className={cx(
+        "text-center rounded-2xl transition-colors",
+        // Tempo acabou: bloco vermelho com texto branco, bem visível de longe.
+        esgotado && "bg-danger text-white py-3 px-4 shadow-lg animate-pulse",
+      )}
+      aria-live="polite"
+    >
       <div
         className={cx(
           "tabular font-mono font-bold leading-none text-5xl md:text-6xl",
-          esgotado ? "text-danger animate-pulse" : rodando ? "text-ink" : "text-muted",
+          esgotado ? "text-white" : rodando ? "text-ink" : "text-muted",
         )}
       >
         {esgotado ? `+${mmss(restante)}` : mmss(restante)}
       </div>
-      <p className={cx("mt-1 text-xs font-semibold uppercase tracking-wide", esgotado ? "text-danger" : "text-muted")}>
+      <p
+        className={cx(
+          "mt-1 font-semibold uppercase tracking-wide",
+          esgotado ? "text-sm text-white" : "text-xs text-muted",
+        )}
+      >
         {esgotado ? "Tempo esgotado" : rodando ? "Em andamento" : decorrido > 0 ? "Pausado" : `${minutos} min`}
       </p>
     </div>

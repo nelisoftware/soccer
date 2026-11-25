@@ -12,7 +12,9 @@ export function proximoSubstituto(
   ctx: Contexto,
 ): string | undefined {
   const emQuadra = temporariosEmQuadra(estado);
-  return estado.fila.find((id) => !emQuadra.has(id) && podeEntrarNoTime(ctx, id, restantes));
+  const livres = estado.fila.filter((id) => !emQuadra.has(id));
+  // Exceção: se só há idosos disponíveis, entra o primeiro deles (melhor que jogar com um a menos).
+  return livres.find((id) => podeEntrarNoTime(ctx, id, restantes)) ?? livres[0];
 }
 
 /**

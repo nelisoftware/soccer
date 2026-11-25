@@ -27,7 +27,7 @@ function mulberry32(seed: number) {
   };
 }
 
-const IDOSOS = new Set(["Mario", "Arcangilo", "Idoso3"]);
+const IDOSOS = new Set(["Mario", "Arcangilo", "Idoso3", "Idoso4"]);
 const GOLEIROS = new Set(["G1", "G2", "G3"]);
 
 function ctx(config: Partial<ConfigSala> = {}, seed = 1): Contexto {
@@ -105,6 +105,21 @@ describe("sorteio inicial", () => {
     expect(e.fila).toEqual(["Idoso3", "G"]);
   });
 
+  it("exceção: sem gente suficiente, um time fica com 2 idosos em vez de jogar com um a menos", () => {
+    // 9 jogadores, 4 idosos, 4 por time: só 5 não idosos para 8 vagas.
+    const chegada = ["A", "Mario", "Arcangilo", "Idoso3", "Idoso4", "B", "C", "D", "E"];
+    for (let seed = 1; seed <= 30; seed++) {
+      const c = ctx({}, seed);
+      const e = sortearTimes(chegar(chegada, c), c);
+      const [a, b] = e.emQuadra;
+      expect(a.jogadores).toHaveLength(4);
+      expect(b.jogadores).toHaveLength(4);
+      const idososPorTime = [a, b].map((t) => t.jogadores.filter((id) => IDOSOS.has(id)).length).sort();
+      expect(idososPorTime).toEqual([1, 2]);
+      expect(e.fila).toEqual(["Idoso4"]);
+    }
+  });
+
   it("sem limite de idosos, pega simplesmente os 2×N primeiros", () => {
     const chegada = ["Mario", "Arcangilo", "Idoso3", "A", "B", "C", "D", "E", "F"];
     const c = ctx({ permiteMaisDeUmIdoso: true });
@@ -144,6 +159,15 @@ describe("times de espera derivados da fila", () => {
       ["Arcangilo", "D"],
     ]);
   });
+
+  it("exceção: só sobraram idosos, eles completam o mesmo time", () => {
+    const c = ctx();
+    expect(formarTimesDaFila(["Mario", "Arcangilo"], c)).toEqual([["Mario", "Arcangilo"]]);
+    expect(formarTimesDaFila(["Mario", "A", "Arcangilo", "B", "C", "Idoso3"], c)).toEqual([
+      ["Mario", "A", "B", "C"],
+      ["Arcangilo", "Idoso3"],
+    ]);
+  });
 });
 
 describe("substituição", () => {
@@ -155,6 +179,15 @@ describe("substituição", () => {
       [j(10), j(11), j(12), j(13)],
       [j(14), j(15), j(16), "Mario"],
     ]);
+  });
+
+  it("exceção: se na fila só há idosos, entra o primeiro deles", () => {
+    const c = ctx();
+    const base = estadoExemplo();
+    base.fila = ["Idoso3", "Idoso4"];
+    const e = substituir(base, "Wilson", false, c); // time de Wilson já tem o Arcangilo
+    expect(e.emQuadra[0].jogadores).toContain("Idoso3");
+    expect(e.fila).toEqual(["Idoso4"]);
   });
 
   it("substituído que foi embora não volta para a fila", () => {

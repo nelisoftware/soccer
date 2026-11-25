@@ -7,6 +7,8 @@ import { clonar, ehIdoso, embaralhar, ordenarPorChegada, usaFilaGoleiros } from 
  * Sorteia os 2 primeiros times entre os primeiros 2×N da fila.
  * - Com "1 idoso por time": só os 2 primeiros idosos entram, 1 em cada time;
  *   idosos extras cedem a vaga ao próximo não idoso e continuam na fila (Time 3).
+ *   Exceção: se não houver não idosos suficientes para completar os times,
+ *   os idosos extras entram (um time fica com mais de 1 idoso).
  * - Os demais são sorteados aleatoriamente.
  * - Cada time é exibido em ordem de chegada.
  */
@@ -16,14 +18,23 @@ export function sortearTimes(estado: EstadoDia, ctx: Contexto): EstadoDia {
   const limite = !ctx.config.permiteMaisDeUmIdoso;
 
   const selecionados: string[] = [];
+  const idososPulados: string[] = [];
   let idosos = 0;
   for (const id of estado.fila) {
     if (selecionados.length === 2 * n) break;
     if (limite && ehIdoso(ctx, id)) {
-      if (idosos >= 2) continue;
+      if (idosos >= 2) {
+        idososPulados.push(id);
+        continue;
+      }
       idosos++;
     }
     selecionados.push(id);
+  }
+  // Exceção: não há gente suficiente para completar os 2 times sem repetir idoso.
+  // Antes deixar um time com mais de 1 idoso do que jogar com um a menos.
+  while (selecionados.length < 2 * n && idososPulados.length > 0) {
+    selecionados.push(idososPulados.shift()!);
   }
   if (selecionados.length < 2) throw new ErroRegra("Jogadores insuficientes para o sorteio.");
 
@@ -36,8 +47,8 @@ export function sortearTimes(estado: EstadoDia, ctx: Contexto): EstadoDia {
   const tamanhoA = Math.ceil(selecionados.length / 2);
   const a: string[] = [];
   const b: string[] = [];
-  if (idososSel[0]) a.push(idososSel[0]);
-  if (idososSel[1]) b.push(idososSel[1]);
+  // Idosos alternados entre os times, para ficarem o mais divididos possível.
+  idososSel.forEach((id, i) => (i % 2 === 0 ? a : b).push(id));
   for (const id of outros) {
     if (a.length < tamanhoA) a.push(id);
     else b.push(id);

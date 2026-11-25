@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import logo from "@/public/logoPelada.png";
 import {
-  IconeBola,
   IconeCampo,
   IconeConfig,
   IconeDinheiro,
@@ -35,10 +36,8 @@ export function NavSala() {
     <>
       {/* Laptop/Desktop: menu lateral */}
       <nav className="hidden xl:flex fixed inset-y-0 left-0 w-60 flex-col border-r border-line bg-surface px-4 py-6">
-        <Link href="/" className="flex items-center gap-2.5 px-2 mb-8">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-on-accent">
-            <IconeBola width={22} height={22} />
-          </span>
+        <Link href="/" className="flex items-center gap-3 px-2 mb-8">
+          <Image src={logo} alt="" aria-hidden sizes="48px" className="h-12 w-12 rounded-[22%] shadow-sm" />
           <span className="text-lg font-bold">Pelada</span>
         </Link>
         <ul className="space-y-1">

@@ -4,25 +4,55 @@ import { useEffect, useRef, useState } from "react";
 import { tempoDecorridoMs, type Partida } from "@/lib/engine";
 import { cx } from "./ui";
 
-function bipar() {
+/**
+ * Um único AudioContext para a página. Navegadores (principalmente no celular) só
+ * liberam áudio depois de um toque do usuário, então ele é "destravado" no primeiro
+ * toque/tecla e reaproveitado quando o tempo acaba.
+ */
+let audio: AudioContext | null = null;
+
+function obterAudio(): AudioContext | null {
+  if (audio) return audio;
   try {
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
-    [0, 0.35, 0.7].forEach((t) => {
-      const osc = ctx.createOscillator();
-      const ganho = ctx.createGain();
-      osc.frequency.value = 880;
-      ganho.gain.setValueAtTime(0.25, ctx.currentTime + t);
-      ganho.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.3);
-      osc.connect(ganho).connect(ctx.destination);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + 0.3);
-    });
-    setTimeout(() => ctx.close(), 1500);
+    audio = new Ctx();
   } catch {
-    /* sem áudio */
+    audio = null;
   }
-  navigator.vibrate?.([300, 150, 300, 150, 300]);
+  return audio;
+}
+
+function destravarAudio() {
+  const ctx = obterAudio();
+  if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => {});
+}
+
+function bipar() {
+  const ctx = obterAudio();
+  if (ctx) {
+    const tocar = () => {
+      const inicio = ctx.currentTime + 0.05;
+      // 3 séries de 3 bipes (agudo, agudo, mais agudo): alarme de fim de tempo.
+      for (let serie = 0; serie < 3; serie++) {
+        [0, 0.2, 0.4].forEach((t, i) => {
+          const quando = inicio + serie * 0.9 + t;
+          const osc = ctx.createOscillator();
+          const ganho = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.value = i === 2 ? 1320 : 880;
+          ganho.gain.setValueAtTime(0.0001, quando);
+          ganho.gain.exponentialRampToValueAtTime(0.3, quando + 0.01);
+          ganho.gain.exponentialRampToValueAtTime(0.0001, quando + 0.18);
+          osc.connect(ganho).connect(ctx.destination);
+          osc.start(quando);
+          osc.stop(quando + 0.2);
+        });
+      }
+    };
+    if (ctx.state === "suspended") ctx.resume().then(tocar, () => {});
+    else tocar();
+  }
+  navigator.vibrate?.([300, 150, 300, 150, 300, 400, 300, 150, 300, 150, 300]);
 }
 
 function mmss(ms: number) {
@@ -51,6 +81,15 @@ export function Cronometro({
   const [desvio] = useState(() => agoraServidor - Date.now());
   const avisou = useRef<string | null>(null);
   const rodando = partida.iniciadaEm !== null;
+
+  useEffect(() => {
+    window.addEventListener("pointerdown", destravarAudio);
+    window.addEventListener("keydown", destravarAudio);
+    return () => {
+      window.removeEventListener("pointerdown", destravarAudio);
+      window.removeEventListener("keydown", destravarAudio);
+    };
+  }, []);
 
   useEffect(() => {
     if (!rodando) return;

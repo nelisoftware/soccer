@@ -22,6 +22,12 @@ function formatarData(iso: string) {
   return new Date(a, m - 1, d).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" });
 }
 
+/** "2026-11-25" → "25/11" (usada no cabeçalho do celular). */
+function dataCurta(iso: string) {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
+
 export function PainelJogo({
   codigo,
   config,
@@ -131,9 +137,10 @@ export function PainelJogo({
       <CabecalhoSala
         codigo={codigo}
         titulo={formatarData(dia.data)}
+        tituloCurto={dataCurta(dia.data)}
         editavel={editavel}
         acoes={
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-1 md:gap-2">
             <Botao
               tamanho="sm"
               disabled={pendente || !dia.podeDesfazer}

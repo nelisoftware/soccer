@@ -11,6 +11,7 @@ import { ErroRegra, type Contexto, type EstadoDia } from "@/lib/engine";
 import { OK, type RespostaAcao } from "@/lib/resposta";
 import type { CorTime } from "@/lib/cores";
 import { configSchema, corSchema, idSchema, jogadorSchema, mesSchema } from "@/lib/validacao";
+import { FormatHelper } from "@/lib/formatters";
 
 const MAX_HISTORICO = 20;
 
@@ -41,6 +42,22 @@ async function salaEditavel(codigo: string): Promise<SalaDTO> {
   if (!sala) throw new ErroAcao("Sala não encontrada.");
   await exigirEdicao(sala.id);
   return sala;
+}
+
+/** Impede dois jogadores com o mesmo nome na sala (ignora maiúsculas, acentos e espaços). */
+async function garantirNomeUnico(salaId: string, nome: string, ignorarId?: string) {
+  const alvo = FormatHelper.normalizeLower(nome.trim().replace(/\s+/g, " "));
+  const jogadores = await listarJogadores(salaId, true);
+  const existente = jogadores.find(
+    (j) => j.id !== ignorarId && FormatHelper.normalizeLower(j.nome.trim().replace(/\s+/g, " ")) === alvo,
+  );
+  if (existente) {
+    throw new ErroAcao(
+      existente.ativo
+        ? `Já existe um jogador chamado ${existente.nome}.`
+        : `Já existe um jogador chamado ${existente.nome} (inativo). Reative-o em Jogadores.`,
+    );
+  }
 }
 
 async function contexto(sala: SalaDTO): Promise<Contexto> {
@@ -152,9 +169,11 @@ export async function cadastrarEChegar(
 ): Promise<RespostaAcao> {
   const parsed = jogadorSchema.safeParse(dados);
   if (!parsed.success) return { ok: false, erro: parsed.error.issues[0].message };
+  parsed.data.nome = FormatHelper.name(parsed.data.nome);
   let novoId: string | null = null;
   const criar = await executar(async () => {
     const sala = await salaEditavel(codigo);
+    await garantirNomeUnico(sala.id, parsed.data.nome);
     const [j] = await db()
       .insert(schema.jogadores)
       .values({ salaId: sala.id, ...parsed.data })
@@ -286,13 +305,16 @@ export async function salvarJogador(
   return executar(async () => {
     const sala = await salaEditavel(codigo);
     const d = jogadorSchema.parse(dados);
-    if (jogadorId === null) {
+    d.nome = FormatHelper.name(d.nome);
+    const id = jogadorId === null ? undefined : idSchema.parse(jogadorId);
+    await garantirNomeUnico(sala.id, d.nome, id);
+    if (id === undefined) {
       await db().insert(schema.jogadores).values({ salaId: sala.id, ...d });
     } else {
       await db()
         .update(schema.jogadores)
         .set(d)
-        .where(and(eq(schema.jogadores.id, idSchema.parse(jogadorId)), eq(schema.jogadores.salaId, sala.id)));
+        .where(and(eq(schema.jogadores.id, id), eq(schema.jogadores.salaId, sala.id)));
     }
   });
 }
